@@ -4,8 +4,25 @@
     box-sizing: border-box;
 }
 
-#heatmapCanvas {
-    border: 1px solid black;
+#container {
+    position: relative;
     width: 100vw;
     height: 100vh;
 }
+
+#map {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    top: 0;
+    left: 0;
+    background: url("http://localhost:8000/map.png") no-repeat;
+    background-size: 100% 100%;
+}
+
+#heatmapCanvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 1;
+  }

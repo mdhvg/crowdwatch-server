@@ -5,130 +5,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Circular Crowd Density Heatmap</title>
-    <style>
-        body {
-            margin: 0;
-        }
-
-        canvas {
-            display: block;
-        }
-    </style>
+    <link rel="stylesheet" href="style.css" />
 </head>
 
 <body>
-    <canvas id="heatmapCanvas" width="640" height="480"></canvas>
-
-    <script>
-        const canvas = document.getElementById("heatmapCanvas");
-        const ctx = canvas.getContext('2d');
-
-        // Set canvas size to fill the entire window
-        function resizeCanvas() {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-        }
-
-        // Initial canvas size
-        resizeCanvas();
-
-        // Resize the canvas when the window is resized
-        window.addEventListener("resize", resizeCanvas);
-
-        const gridSize = 50;
-        let xCoords = [];
-        let yCoords = [];
-
-        // Function to receive continuous input of new points (simulating input stream)
-        function updatePoints(newXCoords, newYCoords) {
-            xCoords = newXCoords;
-            yCoords = newYCoords;
-        }
-
-        // Function to generate the heatmap data
-        function generateHeatmap(xCoords, yCoords, width, height, gridSize) {
-            const rows = Math.ceil(height / gridSize);
-            const cols = Math.ceil(width / gridSize);
-            const heatmap = Array.from({ length: rows }, () => Array(cols).fill(0));
-
-            for (let i = 0; i < xCoords.length; i++) {
-                const x = xCoords[i];
-                const y = yCoords[i];
-                const gridX = Math.floor(x / gridSize);
-                const gridY = Math.floor(y / gridSize);
-
-                if (gridX >= 0 && gridX < cols && gridY >= 0 && gridY < rows) {
-                    heatmap[gridY][gridX]++;
-                }
-            }
-            console.log(heatmap.length);
-            return heatmap;
-        }
-
-        // Function to draw circular heatmap on canvas
-        function drawCircularHeatmap(heatmap, gridSize, ctx, width, height) {
-            ctx.clearRect(0, 0, width, height); // Clear the canvas
-
-            for (let row = 0; row < heatmap.length; row++) {
-                for (let col = 0; col < heatmap[row].length; col++) {
-                    const intensity = heatmap[row][col];
-                    if (intensity > 0) {
-                        const alpha = Math.min(intensity / 10, 1); // Adjust alpha based on intensity
-                        const radius = gridSize / 2; // Radius for circular heatmap
-
-                        // Create a radial gradient
-                        const gradient = ctx.createRadialGradient(
-                            col * gridSize + radius, // X coordinate for center
-                            row * gridSize + radius, // Y coordinate for center
-                            0, // Inner radius
-                            col * gridSize + radius, // X coordinate for edge
-                            row * gridSize + radius, // Y coordinate for edge
-                            radius // Outer radius
-                        );
-
-                        // Define gradient color stops
-                        if (intensity < 5) {
-                            gradient.addColorStop(0, `rgba(0, 255, 0, ${alpha})`); // Green
-                            // gradient.addColorStop(1, `rgba(0, 255, 0, 0)`); // Transparent
-                        } else if (intensity < 10) {
-                            gradient.addColorStop(0, `rgba(255, 255, 0, ${alpha})`); // Yellow
-                            //gradient.addColorStop(1, `rgba(255, 255, 0, 0)`); // Transparent
-                        } else {
-                            gradient.addColorStop(0, `rgba(255, 0, 0, ${alpha})`); // Red
-                            // gradient.addColorStop(1, `rgba(255, 0, 0, 0)`); // Transparent
-                        }
-
-                        // Fill the circular area with the gradient
-                        ctx.fillStyle = gradient;
-                        ctx.beginPath();
-                        ctx.arc(col * gridSize + radius, row * gridSize + radius, radius, 0, Math.PI * 2);
-                        ctx.fill();
-                    }
-                }
-            }
-        }
-
-        // Function to simulate continuous data input and rendering
-
-        function simulateContinuousDataInput() {
-            // Simulate continuous updates with random coordinates (replace this with actual input stream)
-            const newXCoords = Array.from({ length: 100 }, () => Math.random() * canvas.width);
-            const newYCoords = Array.from({ length: 100 }, () => Math.random() * canvas.height);
-
-            // Update the points with new coordinates
-            updatePoints(newXCoords, newYCoords);
-
-            // Generate and draw the heatmap
-            const heatmap = generateHeatmap(xCoords, yCoords, canvas.width, canvas.height, gridSize);
-            drawCircularHeatmap(heatmap, gridSize, ctx, canvas.width, canvas.height);
-
-            // Request the next animation frame to simulate continuous updates
-            requestAnimationFrame(simulateContinuousDataInput);
-        }
-
-        // Start simulating continuous data input
-        simulateContinuousDataInput();
-    </script>
+    <div id="container">
+        <div id="map"></div>
+        <canvas id="heatmapCanvas"></canvas>
+    </div>
+    <script src="index.js" type="module"></script>
 </body>
 
 </html>
