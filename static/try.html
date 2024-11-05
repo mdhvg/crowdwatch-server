@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Global Density-Based Heatmap</title>
+    <style>
+        body {
+            margin: 0;
+        }
+
+        canvas {
+            display: block;
+        }
+    </style>
+</head>
+
+<body>
+    <canvas id="heatmapCanvas" width="640" height="480"></canvas>
+
+    <script>
+        const canvas = document.getElementById("heatmapCanvas");
+        const ctx = canvas.getContext('2d');
+
+        // Set canvas size to fill the entire window
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+
+        // Initial canvas size
+        resizeCanvas();
+
+        // Resize the canvas when the window is resized
+        window.addEventListener("resize", resizeCanvas);
+
+        const gridSize = 50;
+        let xCoords = [];
+        let yCoords = [];
+
+        // Function to receive continuous input of new points (simulating input stream)
+        function updatePoints(newXCoords, newYCoords) {
+            xCoords = newXCoords;
+            yCoords = newYCoords;
+        }
+
+        // Function to generate the heatmap data
+        function generateHeatmap(xCoords, yCoords, width, height, gridSize) {
+            const rows = Math.ceil(height / gridSize);
+            const cols = Math.ceil(width / gridSize);
+            const heatmap = Array.from({ length: rows }, () => Array(cols).fill(0));
+
+            for (let i = 0; i < xCoords.length; i++) {
+                const x = xCoords[i];
+                const y = yCoords[i];
+                const gridX = Math.floor(x / gridSize);
+                const gridY = Math.floor(y / gridSize);
+
+                if (gridX >= 0 && gridX < cols && gridY >= 0 && gridY < rows) {
+                    heatmap[gridY][gridX]++;
+                }
+            }
+            return heatmap;
+        }
+
+        // Function to calculate global density across the canvas
+        function calculateTotalDensity(heatmap) {
+            let totalDensity = 0;
+            let maxDensity = 0;
+
+            // Calculate total and maximum density
+            for (let row = 0; row < heatmap.length; row++) {
+                for (let col = 0; col < heatmap[row].length; col++) {
+                    totalDensity += heatmap[row][col];
+                    if (heatmap[row][col] > maxDensity) {
+                        maxDensity = heatmap[row][col];
+                    }
+                }
+            }
+
+            return { totalDensity, maxDensity };
+        }
+
+        // Function to map density to a color gradient
+        function getColorFromDensity(density, maxDensity) {
+            const normalizedDensity = density / maxDensity; // Normalize density value between 0 and 1
+
+            if (normalizedDensity < 0.33) {
+                return `rgba(0, 255, 0, ${normalizedDensity})`; // Green for low density
+            } else if (normalizedDensity < 0.66) {
+                return `rgba(255, 255, 0, ${normalizedDensity})`; // Yellow for medium density
+            } else {
+                return `rgba(255, 0, 0, ${normalizedDensity})`; // Red for high density
+            }
+        }
+
+        // Function to draw the singular heatmap based on total density
+        function drawSingularHeatmap(heatmap, gridSize, ctx, width, height) {
+            ctx.clearRect(0, 0, width, height); // Clear the canvas
+
+            // Calculate total and max density
+            const { totalDensity, maxDensity } = calculateTotalDensity(heatmap);
+
+            // Loop through each cell in the heatmap and color the entire canvas based on relative density
+            for (let row = 0; row < heatmap.length; row++) {
+                for (let col = 0; col < heatmap[row].length; col++) {
+                    const intensity = heatmap[row][col];
+                    if (intensity > 0) {
+                        const color = getColorFromDensity(intensity, maxDensity);
+                        ctx.fillStyle = color;
+
+                        // Fill the grid cell with the color
+                        ctx.fillRect(col * gridSize, row * gridSize, gridSize, gridSize);
+                    }
+                }
+            }
+        }
+
+        // Function to simulate continuous data input and rendering
+        //function simulateContinuousDataInput() {
+        // Simulate continuous updates with random coordinates (replace this with actual input stream)
+        //const newXCoords = Array.from({ length: 100 }, () => Math.random() * canvas.width);
+        //const newYCoords = Array.from({ length: 100 }, () => Math.random() * canvas.height);
+
+        // Update the points with new coordinates
+        //updatePoints(newXCoords, newYCoords);
+
+        // Generate and draw the heatmap
+        //const heatmap = generateHeatmap(xCoords, yCoords, canvas.width, canvas.height, gridSize);
+        //drawSingularHeatmap(heatmap, gridSize, ctx, canvas.width, canvas.height);
+
+        // Request the next animation frame to simulate continuous updates
+        //requestAnimationFrame(simulateContinuousDataInput);
+        // }
+
+        // Start simulating continuous data input
+        // simulateContinuousDataInput();
+        xCoords = [0.4664062559604645, 0.5375000238418579, 0.40312501788139343, 0.9351562857627869, 0.5335937738418579, 0.27421876788139343]
+        yCoords = [0.7781250476837158, 0.6635416746139526, 0.6062500476837158, 0.04895833507180214, 0.5770833492279053, 0.5708333849906921]
+        const heatmap = generateHeatmap(xCoords, yCoords, canvas.width, canvas.height, gridSize);
+        drawSingularHeatmap(heatmap, gridSize, ctx, canvas.width, canvas.height);
+
+    </script>
+</body>
+
+</html>

@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from socketio import ASGIApp, AsyncServer
 import uvicorn
 import base64
@@ -63,6 +64,43 @@ classes = None  # filter by class: --class 0, or --class 0 2 3
 agnostic_nms = False  # class-agnostic NMS
 
 headcoords: torch.Tensor = torch.tensor([])
+videos = None
+
+maps = {
+    "LT": {
+        "path": "lt.png",
+        "videos": [
+            {
+                "path": "lt.mp4",
+                "xFlip": True,
+                "yFlip": False,
+                "startRatio": [493 / 911.0, 330 / 634.0],
+                "diffRatio": [247 / 911.0, 219 / 634.0],
+            },
+            {
+                "path": "lt2.mp4",
+                "xFlip": True,
+                "yFlip": False,
+                "startRatio": [267 / 911.0, 361 / 634.0],
+                "diffRatio": [153 / 911.0, 193 / 634.0],
+            },
+        ],
+    },
+    "Jaggi": {
+        "path": "Jaggi.jpg",
+        "videos": [
+            {
+                "path": "jaggi.mp4",
+                "xFlip": False,
+                "yFlip": True,
+                "startRatio": [294 / 694.0, 294 / 936.0],
+                "diffRatio": [245 / 694.0, 234 / 936.0],
+            }
+        ],
+    },
+}
+
+currentMap = "Jaggi"
 
 # Allow CORS for all origins
 app.add_middleware(
@@ -125,13 +163,16 @@ def video_frame(sid, data):
     if len(det):
         # Rescale boxes from img_size to im0 size
         det[:, :4] = scale_boxes(im.shape[2:], det[:, :4], shape).round()
-        cv2.imwrite("static/output.jpg", frame)
 
         det = det[:, :4]
         headcoords = (det[:, :2] + det[:, 2:]) / 2
-        print(shape[1], shape[0])
+        # put circle at headcoords
+        for x, y in headcoords:
+            cv2.circle(frame, (int(x), int(y)), 5, (0, 0, 255), -1)
+        cv2.imwrite("static/output.jpg", frame)
         headcoords[:, 0] /= shape[1]
         headcoords[:, 1] /= shape[0]
+        headcoords[:, 1] = 1 - headcoords[:, 1]
 
 
 @sio.event
@@ -141,28 +182,91 @@ def message(sid, data):
 
 @sio.event
 async def get_headcoords(sid):
-    await sio.emit(
-        "headcoords",
-        json.dumps(
+    global videos, dt, model, device, conf_thres, iou_thres, classes, agnostic_nms, max_det, seen
+
+    if videos is None:
+        videos = [
+            cv2.VideoCapture(os.path.join("videos", v["path"]))
+            for v in maps[currentMap]["videos"]
+        ]
+
+    res = []
+    headcoords = None
+
+    for i, v in enumerate(videos):
+        _, frame = v.read()
+
+        shape = frame.shape
+
+        with dt[0]:
+            # Apply transformations to frame
+            im0 = [frame]
+            im = np.stack(
+                [
+                    letterbox(x, imgsz, stride=model.stride, auto=model.pt)[0]
+                    for x in im0
+                ]
+            )  # resize
+            im = im[..., ::-1].transpose((0, 3, 1, 2))  # BGR to RGB, BHWC to BCHW
+            im = np.ascontiguousarray(im)  # contiguous
+            im = torch.from_numpy(im).to(model.device)
+            im = im.half() if model.fp16 else im.float()  # uint8 to fp16/32
+            im /= 255  # 0 - 255 to 0.0 - 1.0
+
+        # Inference
+        with dt[1]:
+            pred = model(im)
+
+        # NMS
+        with dt[2]:
+            pred = non_max_suppression(
+                pred, conf_thres, iou_thres, classes, agnostic_nms, max_det=max_det
+            )
+
+        # Process predictions
+        det = pred[0]
+        if len(det):
+            # Rescale boxes from img_size to im0 size
+            det[:, :4] = scale_boxes(im.shape[2:], det[:, :4], shape).round()
+
+            det = det[:, :4]
+            headcoords = (det[:, :2] + det[:, 2:]) / 2
+            # put circle at headcoords
+            for x, y in headcoords:
+                cv2.circle(frame, (int(x), int(y)), 5, (0, 0, 255), -1)
+            headcoords[:, 0] /= shape[1]
+            headcoords[:, 1] /= shape[0]
+            headcoords[:, 1] = 1 - headcoords[:, 1]
+
+        res.append(
             {
-                "startRatio": [0.68715697, 0.585173502],
-                "endRatio": [0.81778265, 0.681388013],
-                "diffRatio": [0.13062568, 0.096214511],
-                "headcoords": headcoords.tolist(),
+                "startRatio": maps[currentMap]["videos"][i]["startRatio"],
+                "diffRatio": maps[currentMap]["videos"][i]["diffRatio"],
+                "headCoords": headcoords.tolist(),
+                "xFlip": maps[currentMap]["videos"][i]["xFlip"],
+                "yFlip": maps[currentMap]["videos"][i]["yFlip"],
             }
-        ),
+            if headcoords is not None
+            else {
+                "startRatio": maps[currentMap]["videos"][i]["startRatio"],
+                "diffRatio": maps[currentMap]["videos"][i]["diffRatio"],
+                "headCoords": [],
+                "xFlip": maps[currentMap]["videos"][i]["xFlip"],
+                "yFlip": maps[currentMap]["videos"][i]["yFlip"],
+            }
+        )
+        headcoords = None
+
+    await sio.emit(
+        "headCoords",
+        json.dumps(res),
         room=sid,
     )
 
 
-@app.get("/headcoords")
-def get_headcoords() -> dict:
-    return {
-        "startRatio": [0.68715697, 0.585173502],
-        "endRatio": [0.81778265, 0.681388013],
-        "diffRatio": [0.13062568, 0.096214511],
-        "headcoords": headcoords.tolist(),
-    }
+@app.get("/map")
+def get_map() -> dict:
+    return FileResponse(os.path.join("static", maps[currentMap]["path"]))
 
 
 app.mount("/", StaticFiles(directory="static", html=True), name="static")

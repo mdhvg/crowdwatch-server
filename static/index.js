@@ -3,41 +3,84 @@ const socket = io("http://localhost:8000");
 
 socket.on("connect", () => {
     console.log("Connected to server");
-    socket.emit("get_headcoords");
 });
 
 socket.on("disconnect", () => {
     console.log("Disconnected from server");
 });
 
-socket.on("headcoords", (data) => {
-    console.log(data);
-})
+socket.on("headCoords", (data) => plotHeatmap(data));
 
 const delay = ms => new Promise(res => setTimeout(res, ms));
 const canvas = document.getElementById("heatmapCanvas");
 const ctx = canvas.getContext('2d');
 const map = document.getElementById("map");
 const container = document.getElementById("container");
-let coordsArray = []
-let startRatio = [0, 0]
-let diffRatio = [0, 0]
 
 let imgWidth = 0;
 let imgHeight = 0;
 const img = new Image();
-img.src = "http://localhost:8000/map.png"
+img.src = "http://localhost:8000/map"
 img.onload = () => {
     imgWidth = img.width;
     imgHeight = img.height;
     scaleImage()
     setCanvas()
-    drawPoints()
     setInterval(() => {
-        getCoords().then(() => { simulateContinuousDataInput() })
+        fetchCoordinates()
     }, 1000)
-    // getCoords().then(() => { simulateContinuousDataInput() })
 }
+
+const fetchCoordinates = () => {
+    socket.emit("get_headcoords")
+}
+
+const plotHeatmap = (data) => {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const jsonData = JSON.parse(data);
+    // console.log(jsonData)
+    for (let i = 0; i < jsonData.length; i++) {
+        const group = jsonData[i];
+
+        const containerWidth = container.offsetWidth;
+        const containerHeight = container.offsetHeight;
+
+        const startRatio = group["startRatio"];
+        const diffRatio = group["diffRatio"];
+
+        const relevantWidth = containerWidth * diffRatio[0];
+        const relevantHeight = containerHeight * diffRatio[1];
+
+        const offsetX = containerWidth * startRatio[0];
+        const offsetY = containerHeight * startRatio[1];
+
+        const xFlip = group["xFlip"];
+        const yFlip = group["yFlip"];
+
+        let xCoords;
+        if (xFlip) {
+            xCoords = group["headCoords"].map(coord => (1 - coord[0]) * relevantWidth + offsetX);
+        }
+        else {
+            xCoords = group["headCoords"].map(coord => coord[0] * relevantWidth + offsetX);
+        }
+        let yCoords;
+        if (yFlip) {
+            yCoords = group["headCoords"].map(coord => (1 - coord[1]) * relevantHeight + offsetY);
+        }
+        else {
+            yCoords = group["headCoords"].map(coord => coord[1] * relevantHeight + offsetY);
+        }
+
+        console.log(xCoords, yCoords)
+
+        drawPoints(xCoords, yCoords);
+
+        const heatmap = generateHeatmap(xCoords, yCoords, containerWidth, containerHeight, gridSize);
+        drawCircularHeatmap(heatmap, gridSize, ctx);
+    }
+}
+
 
 const setImage = () => {
     const containerWidth = container.offsetWidth;
@@ -67,11 +110,10 @@ const scaleImage = () => {
 window.onresize = () => {
     scaleImage()
     setCanvas()
-    drawPoints()
     // setImage()
 }
 
-const gridSize = 5;
+const gridSize = 100;
 
 // Function to generate the heatmap data
 function generateHeatmap(xCoords, yCoords, width, height, gridSize) {
@@ -93,15 +135,12 @@ function generateHeatmap(xCoords, yCoords, width, height, gridSize) {
 }
 
 // Function to draw circular heatmap on canvas
-async function drawCircularHeatmap(heatmap, gridSize, ctx, xCoords = xCoords, yCoords = yCoords) {
-    cur = 0;
-
-
+async function drawCircularHeatmap(heatmap, gridSize, ctx) {
     for (let row = 0; row < heatmap.length; row++) {
         for (let col = 0; col < heatmap[row].length; col++) {
             const intensity = heatmap[row][col];
             if (intensity > 0) {
-                const alpha = 1; // Adjust alpha based on intensity
+                const alpha = Math.min(intensity, 1); // Adjust alpha based on intensity
                 const radius = gridSize / 2; // Radius for circular heatmap
 
                 // Create a radial gradient
@@ -117,35 +156,30 @@ async function drawCircularHeatmap(heatmap, gridSize, ctx, xCoords = xCoords, yC
                 // Define gradient color stops
                 if (intensity < 3) {
                     gradient.addColorStop(0, `rgba(0, 255, 0, ${alpha})`); // Green
-                    // gradient.addColorStop(1, `rgba(0, 255, 0, 0)`); // Transparent
+                    gradient.addColorStop(1, `rgba(0, 255, 0, 0)`); // Transparent
                 } else if (intensity < 5) {
                     gradient.addColorStop(0, `rgba(255, 255, 0, ${alpha})`); // Yellow
-                    //gradient.addColorStop(1, `rgba(255, 255, 0, 0)`); // Transparent
+                    gradient.addColorStop(1, `rgba(255, 255, 0, 0)`); // Transparent
                 } else {
                     gradient.addColorStop(0, `rgba(255, 0, 0, ${alpha})`); // Red
-                    // gradient.addColorStop(1, `rgba(255, 0, 0, 0)`); // Transparent
+                    gradient.addColorStop(1, `rgba(255, 0, 0, 0)`); // Transparent
                 }
 
                 // Fill the circular area with the gradient
-                ctx.fillStyle = 'rgb(255, 0, 0)';
+                ctx.fillStyle = gradient;
                 ctx.beginPath();
-                console.log(xCoords[cur], yCoords[cur])
-                ctx.arc(xCoords[cur], yCoords[cur], radius, 0, Math.PI * 2);
+                ctx.arc(col * gridSize + radius, row * gridSize + radius, radius, 0, Math.PI * 2);
                 ctx.fill();
-                cur++;
             }
         }
     }
-    console.log(cur)
 }
 
-function drawPoints() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    for (let i = 0; i < coordsArray.length; i++) {
-        console.log(coordsArray[i])
+function drawPoints(xCoords, yCoords) {
+    for (let i = 0; i < xCoords.length; i++) {
         ctx.fillStyle = 'rgb(255, 0, 0)';
         ctx.beginPath();
-        ctx.arc(coordsArray[i][0], coordsArray[i][1], 5, 0, Math.PI * 2);
+        ctx.arc(xCoords[i], yCoords[i], 5, 0, Math.PI * 2);
         ctx.fill();
     }
 }
@@ -167,8 +201,8 @@ async function simulateContinuousDataInput() {
     drawPoints();
 
     // Generate and draw the heatmap
-    // const heatmap = generateHeatmap(xCoords, yCoords, canvas.width, canvas.height, gridSize);
-    // drawCircularHeatmap(heatmap, gridSize, ctx, xCoords, yCoords);
+    const heatmap = generateHeatmap(canvas.width, canvas.height, gridSize);
+    drawCircularHeatmap(heatmap, gridSize, ctx);
 
     // Request the next animation frame to simulate continuous updates
     // await delay(500);
@@ -179,8 +213,10 @@ async function getCoords() {
     const response = await fetch(window.location.href + 'headcoords')
     if (response.ok) {
         const data = await response.json()
-        startRatio = data["startRatio"]
-        diffRatio = data["diffRatio"]
-        coordsArray = data["headcoords"]
+        if (data["headcoords"] && data["headcoords"].length !== 0) {
+            startRatio = data["startRatio"]
+            diffRatio = data["diffRatio"]
+            coordsArray = data["headcoords"]
+        }
     }
 }
