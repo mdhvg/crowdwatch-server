@@ -1,12 +1,9 @@
 # Repo-specific GitIgnore ----------------------------------------------------------------------------------------------
-*.jpg
 *.jpeg
-*.png
 *.bmp
 *.tif
 *.tiff
 *.heic
-*.JPG
 *.JPEG
 *.PNG
 *.BMP
@@ -31,8 +28,8 @@ data/images/*
 !data/hyps
 !data/scripts
 !data/images
-!data/images/zidane.jpg
-!data/images/bus.jpg
+data/images/zidane.jpg
+data/images/bus.jpg
 !data/*.sh
 
 results*.csv
