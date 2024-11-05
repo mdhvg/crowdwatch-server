@@ -1,5 +1,5 @@
 import { io } from "https://cdn.socket.io/4.8.0/socket.io.esm.min.js";
-const socket = io("http://localhost:8000");
+const socket = io("/");
 
 socket.on("connect", () => {
     console.log("Connected to server");
@@ -17,10 +17,13 @@ const ctx = canvas.getContext('2d');
 const map = document.getElementById("map");
 const container = document.getElementById("container");
 
+map.style.background = `url(/map?t=${Math.random()}) no-repeat`;
+map.style.backgroundSize = "100% 100%";
+
 let imgWidth = 0;
 let imgHeight = 0;
 const img = new Image();
-img.src = "http://localhost:8000/map"
+img.src = `/map?t=${Math.random()}`;
 img.onload = () => {
     imgWidth = img.width;
     imgHeight = img.height;
@@ -34,6 +37,9 @@ img.onload = () => {
 const fetchCoordinates = () => {
     socket.emit("get_headcoords")
 }
+
+let xCoords = [];
+let yCoords = [];
 
 const plotHeatmap = (data) => {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -57,41 +63,25 @@ const plotHeatmap = (data) => {
         const xFlip = group["xFlip"];
         const yFlip = group["yFlip"];
 
-        let xCoords;
-        if (xFlip) {
-            xCoords = group["headCoords"].map(coord => (1 - coord[0]) * relevantWidth + offsetX);
+        if (group["headCoords"].length > 0) {
+            if (xFlip) {
+                xCoords = group["headCoords"].map(coord => (1 - coord[0]) * relevantWidth + offsetX);
+            }
+            else {
+                xCoords = group["headCoords"].map(coord => coord[0] * relevantWidth + offsetX);
+            }
+            if (yFlip) {
+                yCoords = group["headCoords"].map(coord => (1 - coord[1]) * relevantHeight + offsetY);
+            }
+            else {
+                yCoords = group["headCoords"].map(coord => coord[1] * relevantHeight + offsetY);
+            }
         }
-        else {
-            xCoords = group["headCoords"].map(coord => coord[0] * relevantWidth + offsetX);
-        }
-        let yCoords;
-        if (yFlip) {
-            yCoords = group["headCoords"].map(coord => (1 - coord[1]) * relevantHeight + offsetY);
-        }
-        else {
-            yCoords = group["headCoords"].map(coord => coord[1] * relevantHeight + offsetY);
-        }
-
-        console.log(xCoords, yCoords)
 
         drawPoints(xCoords, yCoords);
 
         const heatmap = generateHeatmap(xCoords, yCoords, containerWidth, containerHeight, gridSize);
         drawCircularHeatmap(heatmap, gridSize, ctx);
-    }
-}
-
-
-const setImage = () => {
-    const containerWidth = container.offsetWidth;
-    const containerHeight = container.offsetHeight;
-
-    const containerAspectRatio = containerWidth / containerHeight;
-
-    if (containerWidth > containerHeight) {
-        map.style.backgroundSize = `100% ${100 * (containerAspectRatio)}%`;
-    } else {
-        map.style.backgroundSize = `${100 * (1 / containerAspectRatio)}% 100%`;
     }
 }
 
@@ -105,12 +95,9 @@ const scaleImage = () => {
     container.style.height = container.offsetWidth / imageAspect + 'px';
 }
 
-// setImage()
-
 window.onresize = () => {
     scaleImage()
     setCanvas()
-    // setImage()
 }
 
 const gridSize = 100;
@@ -181,42 +168,5 @@ function drawPoints(xCoords, yCoords) {
         ctx.beginPath();
         ctx.arc(xCoords[i], yCoords[i], 5, 0, Math.PI * 2);
         ctx.fill();
-    }
-}
-
-async function simulateContinuousDataInput() {
-    // Update the points with new coordinates
-    const containerWidth = container.offsetWidth;
-    const containerHeight = container.offsetHeight;
-
-    const relevantWidth = containerWidth * diffRatio[0];
-    const relevantHeight = containerHeight * diffRatio[1];
-
-    coordsArray = coordsArray.map(coord => {
-        const x = coord[0] * relevantWidth + containerWidth * startRatio[0];
-        const y = coord[1] * relevantHeight + containerHeight * startRatio[1];
-        return [x, y];
-    });
-
-    drawPoints();
-
-    // Generate and draw the heatmap
-    const heatmap = generateHeatmap(canvas.width, canvas.height, gridSize);
-    drawCircularHeatmap(heatmap, gridSize, ctx);
-
-    // Request the next animation frame to simulate continuous updates
-    // await delay(500);
-    // requestAnimationFrame(getCoords);
-}
-
-async function getCoords() {
-    const response = await fetch(window.location.href + 'headcoords')
-    if (response.ok) {
-        const data = await response.json()
-        if (data["headcoords"] && data["headcoords"].length !== 0) {
-            startRatio = data["startRatio"]
-            diffRatio = data["diffRatio"]
-            coordsArray = data["headcoords"]
-        }
     }
 }

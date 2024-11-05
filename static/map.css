@@ -16,8 +16,6 @@
     height: 100%;
     top: 0;
     left: 0;
-    background: url("http://localhost:8000/map") no-repeat;
-    background-size: 100% 100%;
 }
 
 #heatmapCanvas {

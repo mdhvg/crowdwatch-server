@@ -4,16 +4,34 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Circular Crowd Density Heatmap</title>
-    <link rel="stylesheet" href="map-style.css" />
+    <title>Menu</title>
+    <link rel="stylesheet" href="menu.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&display=swap" rel="stylesheet">
 </head>
 
 <body>
-    <div id="container">
-        <div id="map"></div>
-        <canvas id="heatmapCanvas"></canvas>
+    <div class="container">
+        <h1>CrowdWatch</h1>
+        <a class="tile video" onclick="setMap()" href="map-page.html">
+            <img class="button-icon" src="LT.jpg" alt="LT">
+            <p class="text">LT</p>
+        </a>
+        <a class="tile video" onclick="setMap()" href="map-page.html">
+            <img class="button-icon" src="Jaggi.jpg" alt="Jaggi">
+            <p class="text">Jaggi</p>
+        </a>
+        <a class="tile video" onclick="setMap()" href="map-page.html">
+            <img class="button-icon" src="M.jpg" alt="Hostel M">
+            <p class="text">Hostel M</p>
+        </a>
+        <a class="tile live" href="live-page.html">
+            <img class="button-icon" src="Live.jpg" alt="Live Stream">
+            <p class="text">Live Stream</p>
+        </a>
     </div>
-    <script src="index.js" type="module"></script>
+    <script src="menu.js"></script>
 </body>
 
 </html>

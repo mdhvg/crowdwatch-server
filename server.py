@@ -52,7 +52,7 @@ if str(ROOT) not in sys.path:
 ROOT = Path(os.path.relpath(ROOT, Path.cwd()))  # relative
 
 app = FastAPI()
-device = "cpu"
+device = "cuda:0"
 weights = ROOT / "best.pt"
 imgsz = (640, 640)
 seen, windows, dt = 0, [], None
@@ -68,7 +68,7 @@ videos = None
 
 maps = {
     "LT": {
-        "path": "lt.png",
+        "path": "LT.jpg",
         "videos": [
             {
                 "path": "lt.mp4",
@@ -98,9 +98,21 @@ maps = {
             }
         ],
     },
+    "M": {
+        "path": "M.jpg",
+        "videos": [
+            {
+                "path": "m.mp4",
+                "xFlip": False,
+                "yFlip": True,
+                "startRatio": [326 / 741.0, 365 / 771.0],
+                "diffRatio": [201 / 741.0, 189 / 771.0],
+            }
+        ],
+    },
 }
 
-currentMap = "Jaggi"
+currentMap = None
 
 # Allow CORS for all origins
 app.add_middleware(
@@ -127,52 +139,57 @@ def disconnect(sid):
 
 
 @sio.event
-def video_frame(sid, data):
-    # Decode the JPEG image
-    decoded_array = base64.b64decode(data)
-    np_array = np.frombuffer(decoded_array, np.uint8)
-    frame = cv2.imdecode(np_array, cv2.IMREAD_COLOR)
-    shape = frame.shape
+async def video_frame(sid, data):
+    global currentMap
 
-    global dt, model, device, conf_thres, iou_thres, classes, agnostic_nms, max_det, seen, headcoords
+    if currentMap is not None and currentMap == "Live":
+        await sio.emit("img", data)
 
-    with dt[0]:
-        # Apply transformations to frame
-        im0 = [frame]
-        im = np.stack(
-            [letterbox(x, imgsz, stride=model.stride, auto=model.pt)[0] for x in im0]
-        )  # resize
-        im = im[..., ::-1].transpose((0, 3, 1, 2))  # BGR to RGB, BHWC to BCHW
-        im = np.ascontiguousarray(im)  # contiguous
-        im = torch.from_numpy(im).to(model.device)
-        im = im.half() if model.fp16 else im.float()  # uint8 to fp16/32
-        im /= 255  # 0 - 255 to 0.0 - 1.0
+        # Decode the JPEG image
+        decoded_array = base64.b64decode(data)
+        np_array = np.frombuffer(decoded_array, np.uint8)
+        frame = cv2.imdecode(np_array, cv2.IMREAD_COLOR)
+        shape = frame.shape
 
-    # Inference
-    with dt[1]:
-        pred = model(im)
+        global dt, model, device, conf_thres, iou_thres, classes, agnostic_nms, max_det, seen
 
-    # NMS
-    with dt[2]:
-        pred = non_max_suppression(
-            pred, conf_thres, iou_thres, classes, agnostic_nms, max_det=max_det
-        )
+        with dt[0]:
+            # Apply transformations to frame
+            im0 = [frame]
+            im = np.stack(
+                [
+                    letterbox(x, imgsz, stride=model.stride, auto=model.pt)[0]
+                    for x in im0
+                ]
+            )  # resize
+            im = im[..., ::-1].transpose((0, 3, 1, 2))  # BGR to RGB, BHWC to BCHW
+            im = np.ascontiguousarray(im)  # contiguous
+            im = torch.from_numpy(im).to(model.device)
+            im = im.half() if model.fp16 else im.float()  # uint8 to fp16/32
+            im /= 255  # 0 - 255 to 0.0 - 1.0
 
-    # Process predictions
-    det = pred[0]
-    if len(det):
-        # Rescale boxes from img_size to im0 size
-        det[:, :4] = scale_boxes(im.shape[2:], det[:, :4], shape).round()
+        # Inference
+        with dt[1]:
+            pred = model(im)
 
-        det = det[:, :4]
-        headcoords = (det[:, :2] + det[:, 2:]) / 2
-        # put circle at headcoords
-        for x, y in headcoords:
-            cv2.circle(frame, (int(x), int(y)), 5, (0, 0, 255), -1)
-        cv2.imwrite("static/output.jpg", frame)
-        headcoords[:, 0] /= shape[1]
-        headcoords[:, 1] /= shape[0]
-        headcoords[:, 1] = 1 - headcoords[:, 1]
+        # NMS
+        with dt[2]:
+            pred = non_max_suppression(
+                pred, conf_thres, iou_thres, classes, agnostic_nms, max_det=max_det
+            )
+
+        # Process predictions
+        det = pred[0]
+        if len(det):
+            # Rescale boxes from img_size to im0 size
+            det[:, :4] = scale_boxes(im.shape[2:], det[:, :4], shape).round()
+
+            det = det[:, :4]
+            headcoords = (det[:, :2] + det[:, 2:]) / 2
+            headcoords[:, 0] /= shape[1]
+            headcoords[:, 1] /= shape[0]
+
+            await sio.emit("headCoords", json.dumps(headcoords.tolist()))
 
 
 @sio.event
@@ -267,6 +284,24 @@ async def get_headcoords(sid):
 @app.get("/map")
 def get_map() -> dict:
     return FileResponse(os.path.join("static", maps[currentMap]["path"]))
+
+
+@app.post("/setMap")
+def set_map(map: dict) -> dict:
+    print(map)
+    global currentMap, videos
+    currentMap = map["tile"]
+    videos = None
+    return {"message": "Map set successfully"}
+
+
+@app.get("/clear")
+def clear() -> dict:
+    print("Clearing")
+    global videos, currentMap
+    currentMap = None
+    videos = None
+    return {"message": "Cleared"}
 
 
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
