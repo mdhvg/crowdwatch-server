@@ -51,7 +51,7 @@ if str(ROOT) not in sys.path:
 ROOT = Path(os.path.relpath(ROOT, Path.cwd()))  # relative
 
 app = FastAPI()
-device = "cuda:0"
+device = "cpu"
 weights = ROOT / "best.pt"
 imgsz = (640, 640)
 seen, windows, dt = 0, [], None
