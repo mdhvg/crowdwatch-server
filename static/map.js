@@ -11,11 +11,37 @@ socket.on("disconnect", () => {
 
 socket.on("headCoords", (data) => plotHeatmap(data));
 
-const delay = ms => new Promise(res => setTimeout(res, ms));
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.5.0/firebase-app.js'
+import { getMessaging, onMessage } from 'https://www.gstatic.com/firebasejs/11.5.0/firebase-messaging.js'
+
+const firebaseConfig = {
+    apiKey: "AIzaSyAMrPKwdA4It_zGyN8vzP9pXweCZSAEbmA",
+    authDomain: "crowd-notif.firebaseapp.com",
+    projectId: "crowd-notif",
+    storageBucket: "crowd-notif.firebasestorage.app",
+    messagingSenderId: "296961942599",
+    appId: "1:296961942599:web:7807c7a40ddf4d5db7fd62"
+};
+
+initializeApp(firebaseConfig);
+
+const messaging = getMessaging()
+
+onMessage(messaging, (payload) => {
+    console.log(payload)
+    if (!document.hidden) {
+        new Notification(payload.notification.title, {
+            body: payload.notification.body,
+            icon: payload.notification.image,
+        })
+    }
+})
+
 const canvas = document.getElementById("heatmapCanvas");
 const ctx = canvas.getContext('2d');
 const map = document.getElementById("map");
 const container = document.getElementById("container");
+let notificationSent = false;
 
 map.style.background = `url(/map?t=${Math.random()}) no-repeat`;
 map.style.backgroundSize = "100% 100%";
@@ -148,6 +174,10 @@ async function drawCircularHeatmap(heatmap, gridSize, ctx) {
                     gradient.addColorStop(0, `rgba(255, 255, 0, ${alpha})`); // Yellow
                     gradient.addColorStop(1, `rgba(255, 255, 0, 0)`); // Transparent
                 } else {
+                    if (!notificationSent) {
+                        fetch("/send", { method: "GET" }).then(r => console.log("/send", r.status))
+                        notificationSent = true
+                    }
                     gradient.addColorStop(0, `rgba(255, 0, 0, ${alpha})`); // Red
                     gradient.addColorStop(1, `rgba(255, 0, 0, 0)`); // Transparent
                 }

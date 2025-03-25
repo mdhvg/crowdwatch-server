@@ -1,10 +1,16 @@
-from fastapi import FastAPI
+import firebase_admin
+from firebase_admin import credentials
+import firebase_admin.messaging as Messaging
+
+from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from socketio import ASGIApp, AsyncServer
+
 import uvicorn
 import base64
+from contextlib import asynccontextmanager
 
 import cv2
 import numpy as np
@@ -14,7 +20,6 @@ from pathlib import Path
 import os
 import sys
 import json
-import time
 
 from utils.general import (
     LOGGER,
@@ -51,8 +56,27 @@ if str(ROOT) not in sys.path:
     sys.path.append(str(ROOT))  # add ROOT to PATH
 ROOT = Path(os.path.relpath(ROOT, Path.cwd()))  # relative
 
-app = FastAPI()
-device = "cuda:0"
+cred: credentials.Certificate
+keys: list[str] = []
+KEYS_FILE = "keys.json"
+TOPIC = "CrowdWatch"
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global cred, keys, KEYS_FILE
+    cred = credentials.Certificate("serviceAccountKey.json")
+    firebase_admin.initialize_app(cred)
+    Messaging.subscribe_to_topic
+    with open(KEYS_FILE, "r", encoding="utf-8") as f:
+        keys = json.load(f)
+    yield
+    with open(KEYS_FILE, "w", encoding="utf-8") as f:
+        json.dump(keys, f, ensure_ascii=False, indent=4)
+
+
+app = FastAPI(lifespan=lifespan)
+device = "cpu"
 weights = ROOT / "best.pt"
 imgsz = (640, 640)
 seen, windows, dt = 0, [], None
@@ -71,14 +95,14 @@ maps = {
         "path": "LT.jpg",
         "videos": [
             {
-                "path": "lt.mp4",
+                "path": "./videos/lt.mp4",
                 "xFlip": True,
                 "yFlip": False,
                 "startRatio": [493 / 911.0, 330 / 634.0],
                 "diffRatio": [247 / 911.0, 219 / 634.0],
             },
             {
-                "path": "lt2.mp4",
+                "path": "./videos/lt2.mp4",
                 "xFlip": True,
                 "yFlip": False,
                 "startRatio": [267 / 911.0, 361 / 634.0],
@@ -90,7 +114,7 @@ maps = {
         "path": "Jaggi.jpg",
         "videos": [
             {
-                "path": "jaggi.mp4",
+                "path": "./videos/jaggi.mp4",
                 "xFlip": False,
                 "yFlip": True,
                 "startRatio": [294 / 694.0, 294 / 936.0],
@@ -102,7 +126,7 @@ maps = {
         "path": "M.jpg",
         "videos": [
             {
-                "path": "m.mp4",
+                "path": "./videos/m.mp4",
                 "xFlip": False,
                 "yFlip": True,
                 "startRatio": [326 / 741.0, 365 / 771.0],
@@ -203,7 +227,7 @@ async def get_headcoords(sid):
 
     if videos is None:
         videos = [
-            cv2.VideoCapture(os.path.join("videos", v["path"]))
+            cv2.VideoCapture(os.path.join("static", v["path"]))
             for v in maps[currentMap]["videos"]
         ]
 
@@ -302,6 +326,32 @@ def clear() -> dict:
     currentMap = None
     videos = None
     return {"message": "Cleared"}
+
+
+@app.post("/save_key")
+async def save_key(req: Request):
+    global keys, TOPIC
+    key = await req.json()
+    print(key)
+    if key["token"]:
+        keys.append(key["token"])
+        Messaging.subscribe_to_topic(keys, TOPIC)
+        return 200, {"query": "ok"}
+    return 400, {"query": "invalid (No token found)"}
+
+
+@app.get("/send")
+async def send():
+    global keys, TOPIC
+    message = Messaging.Message(
+        notification=Messaging.Notification(
+            title="Crowd Alert",
+            body="Extremely high crowd density in the area",
+            image="warning.png",
+        ),
+        topic=TOPIC,
+    )
+    firebase_admin.messaging.send(message)
 
 
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
